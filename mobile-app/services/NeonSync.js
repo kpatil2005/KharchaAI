@@ -1,6 +1,6 @@
 // During development: your PC's IP on port 3000
 // After deployment: replace with your Vercel URL e.g. https://kharchaai.vercel.app
-const API_BASE = "http://10.17.172.77:3000";
+const API_BASE = "https://kharcha-ai-sepia.vercel.app";
 
 export async function syncExpenseToNeon(expense) {
   try {
