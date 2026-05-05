@@ -1,13 +1,28 @@
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SYSTEM_PROMPT = `You are a financial SMS parser for Indian bank messages.
-Extract payment info and return ONLY a raw JSON object with these keys:
-- amount: number (the debited amount)
-- merchant: string (who was paid, use UPI ID if no name found)
-- category: string (one of exactly: Food, Travel, Fuel, Shopping, Entertainment, Bills, Other)
-If this is NOT a debit/payment SMS, return exactly: null
-No explanation. No markdown. No code blocks. Just raw JSON or null.`;
+const SYSTEM_PROMPT = `You are a strict Indian bank SMS parser. Your only job is to extract real payment transactions.
+
+RULES:
+1. Only process DEBIT transactions (money going OUT from the user)
+2. IGNORE completely: OTPs, offers, promotions, data alerts, recharge confirmations, credit alerts, fraud warnings, balance enquiries, Jio/telecom messages
+3. For merchant name: use the REAL business name, NOT UPI IDs like "xyz@ybl", NOT reference numbers like "UPI Ref 123", NOT bank names like "BOB" or "SBI"
+4. If UPI ID is like "zomato@icici" → merchant is "Zomato". If "paytmqr..." → merchant is the shop/place if mentioned in SMS, else "Unknown Shop"
+5. For category use ONLY one of: Food, Travel, Fuel, Shopping, Entertainment, Bills, Education, Health, Transfer, Other
+6. Transfer = sending money to a person (personal UPI ID like name@bank)
+
+Return ONLY raw JSON: {"amount": number, "merchant": string, "category": string}
+If not a debit payment SMS, return exactly: null
+No explanation. No markdown. No code blocks.
+
+Examples:
+"Rs 500 debited from A/C XX1234 to Zomato@icici" → {"amount": 500, "merchant": "Zomato", "category": "Food"}
+"Rs 1500 debited to madurwarsakshi@oksbi UPI Ref:123" → {"amount": 1500, "merchant": "Sakshi Madurwar", "category": "Transfer"}
+"Rs 45 debited to paytmqr6hizow@ptys" → {"amount": 45, "merchant": "Unknown Shop", "category": "Shopping"}
+"Your OTP is 1234" → null
+"50% data quota used" → null
+"Rs 239 recharge successful" → null
+"Credited INR 500" → null`;
 
 async function parseWithGroq(text) {
   try {
@@ -24,7 +39,7 @@ async function parseWithGroq(text) {
           { role: "user", content: text },
         ],
         temperature: 0,
-        max_tokens: 150,
+        max_tokens: 100,
       }),
     });
 
@@ -32,7 +47,7 @@ async function parseWithGroq(text) {
     let content = data.choices?.[0]?.message?.content?.trim();
     if (!content || content === "null") return null;
 
-    // Strip markdown code blocks if present
+    // Strip markdown if present
     content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
     const parsed = JSON.parse(content);
@@ -50,8 +65,9 @@ async function parseWithGroq(text) {
 
 function getCategoryEmoji(category = "") {
   const map = {
-    Food: "🍔", Travel: "🚗", Fuel: "⛽",
-    Shopping: "🛍️", Entertainment: "🎬", Bills: "💡", Other: "📦",
+    Food: "🍔", Travel: "🚗", Fuel: "⛽", Shopping: "🛍️",
+    Entertainment: "🎬", Bills: "💡", Education: "📚",
+    Health: "🏥", Transfer: "💸", Other: "📦",
   };
   return map[category] || "📦";
 }

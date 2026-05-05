@@ -20,8 +20,7 @@ async function ensureTable() {
 export async function POST(req: NextRequest) {
   try {
     await ensureTable();
-    const body = await req.json();
-    const { device_id, amount, merchant, category, source, created_at } = body;
+    const { device_id, amount, merchant, category, source, created_at } = await req.json();
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
@@ -42,10 +41,17 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     await ensureTable();
-    const rows = await sql`
-      SELECT * FROM expenses ORDER BY created_at DESC LIMIT 100
-    `;
+    const rows = await sql`SELECT * FROM expenses ORDER BY created_at DESC LIMIT 100`;
     return NextResponse.json(rows);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    await sql`TRUNCATE TABLE expenses RESTART IDENTITY`;
+    return NextResponse.json({ success: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
