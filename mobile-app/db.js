@@ -1,7 +1,8 @@
 import * as SQLite from "expo-sqlite";
-import { syncExpenseToNeon, initNeonTable } from "./services/NeonSync";
+import { syncExpenseToNeon } from "./services/NeonSync";
 
 let db;
+const recentlySaved = new Set(); // dedup cache
 
 export async function getDB() {
   if (!db) {
@@ -13,23 +14,26 @@ export async function getDB() {
         merchant TEXT,
         category TEXT,
         source TEXT DEFAULT 'manual',
-        synced INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now','localtime'))
       );
     `);
-    initNeonTable();
   }
   return db;
 }
 
 export async function saveExpense({ amount, merchant, category, source = "auto" }) {
+  // Dedup: same amount + merchant within 10 seconds = duplicate
+  const key = `${amount}-${merchant}`;
+  if (recentlySaved.has(key)) return;
+  recentlySaved.add(key);
+  setTimeout(() => recentlySaved.delete(key), 10000);
+
   const database = await getDB();
   await database.runAsync(
     "INSERT INTO expenses (amount, merchant, category, source) VALUES (?, ?, ?, ?)",
     [amount, merchant, category, source]
   );
 
-  // Sync to Neon in background — don't block UI
   syncExpenseToNeon({ amount, merchant, category, source }).catch(() => {});
 }
 
